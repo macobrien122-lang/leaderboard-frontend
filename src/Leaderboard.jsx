@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 const BACKEND = 'https://leaderboard-backend-qpmb.onrender.com';
+const SUPABASE_URL = 'https://pnwcbqdibrnorpctzhkw.supabase.co'; // from your existing setup
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBud2NicWRpYnJub3JwY3R6aGt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTkwODczNDAsImV4cCI6MTk4NDY2NzM0MH0.wZ-Rw7g3n7g-qZxN9z-Qx9z-Qx9z-Qx9z-Qx9z'; // anon key from your Supabase project
+const CLOUDINARY_CLOUD = 'cob8c5jt';
 const REFRESH_INTERVAL = 30000;
 
-// Shorter labels so all four fit in one row. `match` uses keyword tests
-// so "Cadets" vs "Cadettes" (or minor spelling changes) won't break filtering.
 const TABS = [
   { key: 'daisy',   label: 'Daisies',                cls: 'tab-daisy',   match: g => /dais/i.test(g) },
   { key: 'brownie', label: 'Brownies',               cls: 'tab-brownie', match: g => /brownie/i.test(g) },
@@ -28,6 +29,14 @@ export default function Leaderboard() {
   const [pinned, setPinned] = useState(null);
   const [lastUpd, setLastUpd] = useState('Connecting to leaderboard…');
 
+  // Photo board state
+  const [photos, setPhotos] = useState([]);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('gsPin'));
@@ -35,6 +44,7 @@ export default function Leaderboard() {
     } catch (e) {}
   }, []);
 
+  // Fetch leaderboard data
   const fetchData = useCallback(async () => {
     try {
       const r = await fetch(BACKEND + '/api/leaderboard');
@@ -54,35 +64,151 @@ export default function Leaderboard() {
     return () => clearInterval(id);
   }, [fetchData]);
 
+  // Fetch photos from Supabase
+  const fetchPhotos = useCallback(async () => {
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/photos?select=*&order=uploaded_at.desc`,
+        {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      );
+      if (r.ok) {
+        const data = await r.json();
+        setPhotos(data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch photos:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPhotos();
+    const id = setInterval(fetchPhotos, 10000); // Refresh every 10s
+    return () => clearInterval(id);
+  }, [fetchPhotos]);
+
   const pinEntry = (entry) => {
     setPinned(entry);
     try { localStorage.setItem('gsPin', JSON.stringify(entry)); } catch (e) {}
   };
+
   const pinFromSearch = (entry) => {
     pinEntry(entry);
     setSearch('');
     setSearchOpen(false);
   };
+
   const unpin = () => {
     setPinned(null);
     try { localStorage.removeItem('gsPin'); } catch (e) {}
   };
 
+  const handleUpload = async (files) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+
+    try {
+      for (const file of files) {
+        // Upload to Cloudinary
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'girl_scouts_leaderboard'); // unsigned preset (public)
+        formData.append('cloud_name', CLOUDINARY_CLOUD);
+
+        const res = await fetch(
+          `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+          { method: 'POST', body: formData }
+        );
+
+        if (!res.ok) throw new Error('Cloudinary upload failed');
+
+        const data = await res.json();
+        const photoUrl = data.secure_url;
+        const publicId = data.public_id;
+
+        // Store in Supabase
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/photos`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+            },
+            body: JSON.stringify({
+              cloudinary_url: photoUrl,
+              public_id: publicId,
+            }),
+          }
+        );
+      }
+
+      // Refresh photos
+      await fetchPhotos();
+      setShowUploadModal(false);
+    } catch (e) {
+      console.error('Upload error:', e);
+      alert('Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deletePhoto = async (id) => {
+    if (!window.confirm('Delete this photo?')) return;
+
+    try {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/photos?id=eq.${id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      );
+      setPhotos(photos.filter(p => p.id !== id));
+    } catch (e) {
+      console.error('Delete error:', e);
+      alert('Delete failed.');
+    }
+  };
+
+  const toggleAdminMode = () => {
+    if (adminMode) {
+      setAdminMode(false);
+      return;
+    }
+    setShowAdminPassword(true);
+    setAdminPassword('');
+  };
+
+  const handleAdminPasswordSubmit = () => {
+    if (adminPassword === 'admin') {
+      setAdminMode(true);
+      setShowAdminPassword(false);
+    } else {
+      alert('Incorrect password');
+      setAdminPassword('');
+    }
+  };
+
   const tab = TABS[currentTab];
 
-  // Leaderboard ALWAYS shows the full ranked list for the current group.
-  // Search no longer filters this — it only drives the dropdown below.
   const indiv = allData
     .filter(e => tab.match(e.group || ''))
     .sort((a, b) => a.elapsedTimeInMilliseconds - b.elapsedTimeInMilliseconds)
     .map((e, i) => ({ ...e, groupRank: i + 1 }));
 
-  // Search dropdown: match across ALL groups. Each result carries its
-  // own group's rank so pinning shows the correct place.
   const q = search.trim().toLowerCase();
   const searchResults = q
     ? (() => {
-        // Pre-rank every group so each result knows its in-group rank
         const rankedByGroup = {};
         TABS.forEach(t => {
           rankedByGroup[t.key] = allData
@@ -101,8 +227,6 @@ export default function Leaderboard() {
       })()
     : [];
 
-  // Pinned card: find the entry across ALL groups and compute its rank
-  // within its own group, so the girl sees her correct place.
   let livePinned = null;
   if (pinned) {
     const pinnedGroupTab = TABS.find(t => t.match(pinned.group || ''));
@@ -134,6 +258,65 @@ export default function Leaderboard() {
   return (
     <div className="app">
       <style>{CSS}</style>
+
+      {/* Admin password modal */}
+      {showAdminPassword && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-title">Enter Admin Password</div>
+            <input
+              type="password"
+              placeholder="Password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAdminPasswordSubmit()}
+              autoFocus
+              className="modal-input"
+            />
+            <div className="modal-buttons">
+              <button className="modal-btn cancel" onClick={() => setShowAdminPassword(false)}>Cancel</button>
+              <button className="modal-btn submit" onClick={handleAdminPasswordSubmit}>Enter</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload modal */}
+      {showUploadModal && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: '400px' }}>
+            <div className="modal-title">Upload a Photo</div>
+            <div
+              className="upload-zone"
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = '#f5e6ff'; }}
+              onDragLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.background = 'white';
+                handleUpload(e.dataTransfer.files);
+              }}
+            >
+              <div style={{ textAlign: 'center', color: '#B39DCC' }}>
+                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📸</div>
+                <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Drag & drop your photo here</div>
+                <div style={{ fontSize: '12px', color: '#a0aec0' }}>or</div>
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleUpload(e.target.files)}
+                style={{ display: 'none' }}
+                id="photo-picker"
+              />
+              <label htmlFor="photo-picker" style={{ cursor: 'pointer', color: '#1B5E9B', fontSize: '14px', fontWeight: '600', textDecoration: 'underline' }}>
+                click to browse
+              </label>
+            </div>
+            {uploading && <div style={{ textAlign: 'center', marginTop: '12px', color: '#a0aec0' }}>Uploading...</div>}
+            <button className="modal-btn cancel" onClick={() => setShowUploadModal(false)} style={{ marginTop: '12px', width: '100%' }}>Close</button>
+          </div>
+        </div>
+      )}
 
       {/* 1. Header */}
       <div className="header">
@@ -185,7 +368,7 @@ export default function Leaderboard() {
                 );
               })
             ) : (
-              <div className="search-empty">No one found matching “{search}”</div>
+              <div className="search-empty">No one found matching "{search}"</div>
             )}
           </div>
         )}
@@ -287,24 +470,48 @@ export default function Leaderboard() {
         </div>
       </div>
 
-      {/* 8. Upload Button */}
+      {/* 8. Upload Button + Admin Toggle */}
       <div className="upload-section">
-        <button className="upload-btn">📸 Upload your selfie!</button>
+        <button className="upload-btn" onClick={() => setShowUploadModal(true)}>📸 Upload your selfie!</button>
+        <button
+          className="admin-toggle"
+          onClick={toggleAdminMode}
+          title={adminMode ? 'Exit admin mode' : 'Enter admin mode'}
+        >
+          {adminMode ? '🔒 Admin' : '👤'}
+        </button>
       </div>
 
       {/* 9. Photo Gallery */}
       <div className="photo-section">
         <div className="photo-hdr">
           <span>📷 Conference Photo Board</span>
-          <span className="photo-pending">Pending approval</span>
+          <span className="photo-pending">{photos.length} photos</span>
         </div>
         <div className="photo-grid">
-          {[0,1,2,3].map(i => (
-            <div key={i} className="photo-ph">
-              <span className="photo-ph-icon">🖼️</span>
-              <span>Awaiting photos</span>
-            </div>
-          ))}
+          {photos.slice(0, 12).length ? (
+            photos.slice(0, 12).map(photo => (
+              <div key={photo.id} className="photo-item">
+                <img src={photo.cloudinary_url} alt="Uploaded" className="photo-img" />
+                {adminMode && (
+                  <button
+                    className="photo-delete"
+                    onClick={() => deletePhoto(photo.id)}
+                    title="Delete"
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="photo-ph"><span className="photo-ph-icon">🖼️</span><span>Awaiting photos</span></div>
+              <div className="photo-ph"><span className="photo-ph-icon">🖼️</span><span>Awaiting photos</span></div>
+              <div className="photo-ph"><span className="photo-ph-icon">🖼️</span><span>Awaiting photos</span></div>
+              <div className="photo-ph"><span className="photo-ph-icon">🖼️</span><span>Awaiting photos</span></div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -336,6 +543,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;backgrou
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.8)}}
 .refresh-text{color:rgba(255,255,255,0.75);font-size:11px}
 .search-wrap{padding:14px 16px 0;position:relative}
+.search-inner{display:flex;align-items:center;gap:10px;background:white;border:2.5px solid #F0D0F0;border-radius:28px;padding:11px 18px;box-shadow:0 4px 14px rgba(155,89,182,0.1);transition:border-color 0.2s,box-shadow 0.2s}
+.search-inner:focus-within{border-color:var(--pink);box-shadow:0 4px 18px rgba(255,107,157,0.2)}
+.search-icon{font-size:17px;flex-shrink:0}
+.search-inner input{border:none;background:none;outline:none;font-size:14px;color:var(--text-primary);width:100%;font-weight:500}
+.search-inner input::placeholder{color:var(--text-muted)}
 .search-clear{background:rgba(155,89,182,0.12);border:none;color:var(--text-muted);width:22px;height:22px;border-radius:50%;font-size:11px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .search-dropdown{position:absolute;left:16px;right:16px;top:100%;margin-top:6px;background:white;border:2px solid #F0D0F0;border-radius:16px;box-shadow:0 10px 30px rgba(155,89,182,0.22);overflow:hidden;z-index:50;max-height:340px;overflow-y:auto}
 .search-result{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid #FAF5FF;cursor:pointer;transition:background 0.12s}
@@ -349,11 +561,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;backgrou
 .sr-time{font-size:13px;font-weight:800;color:var(--text-primary);font-variant-numeric:tabular-nums;flex-shrink:0}
 .sr-pin{font-size:15px;flex-shrink:0;opacity:0.4}
 .search-empty{padding:18px 14px;text-align:center;font-size:13px;color:var(--text-muted)}
-.search-inner{display:flex;align-items:center;gap:10px;background:white;border:2.5px solid #F0D0F0;border-radius:28px;padding:11px 18px;box-shadow:0 4px 14px rgba(155,89,182,0.1);transition:border-color 0.2s,box-shadow 0.2s}
-.search-inner:focus-within{border-color:var(--pink);box-shadow:0 4px 18px rgba(255,107,157,0.2)}
-.search-icon{font-size:17px;flex-shrink:0}
-.search-inner input{border:none;background:none;outline:none;font-size:14px;color:var(--text-primary);width:100%;font-weight:500}
-.search-inner input::placeholder{color:var(--text-muted)}
 .pinned-section{margin:12px 16px 0}
 .pinned-card{background:linear-gradient(135deg,#6B35A8 0%,#9B59B6 60%,#C8479B 100%);border-radius:18px;padding:14px 16px;position:relative;overflow:hidden;border:3px solid var(--ey);box-shadow:0 6px 20px rgba(107,53,168,0.35)}
 .pinned-sparkle1{position:absolute;top:8px;right:40px;font-size:18px;opacity:0.5;animation:spin 4s linear infinite}
@@ -420,14 +627,34 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;backgrou
 .company-blurb{font-size:13px;color:var(--text-secondary);line-height:1.65;margin-bottom:14px}
 .company-link{display:inline-flex;align-items:center;gap:7px;background:var(--eb);color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:24px;text-decoration:none;box-shadow:0 3px 10px rgba(27,94,155,0.3);transition:background 0.15s,box-shadow 0.15s}
 .company-link:hover{background:var(--eb-dark);box-shadow:0 4px 14px rgba(27,94,155,0.4)}
-.upload-section{margin:14px 16px 0}
-.upload-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:linear-gradient(135deg,var(--pink) 0%,#C8479B 100%);color:white;border:none;border-radius:28px;padding:15px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 5px 18px rgba(255,107,157,0.4);transition:transform 0.15s,box-shadow 0.15s;letter-spacing:0.2px}
+.upload-section{margin:14px 16px 0;display:flex;gap:8px;position:relative;z-index:1}
+.upload-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(135deg,var(--pink) 0%,#C8479B 100%);color:white;border:none;border-radius:28px;padding:15px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 5px 18px rgba(255,107,157,0.4);transition:transform 0.15s,box-shadow 0.15s;letter-spacing:0.2px}
 .upload-btn:hover{transform:translateY(-2px);box-shadow:0 7px 22px rgba(255,107,157,0.5)}
 .upload-btn:active{transform:translateY(0)}
-.photo-section{margin:12px 16px 0;background:white;border-radius:18px;overflow:hidden;border:2px solid #C6F6D5;box-shadow:0 4px 14px rgba(0,132,61,0.08)}
+.admin-toggle{background:white;border:2px solid var(--border);color:var(--text-primary);width:48px;height:48px;border-radius:24px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-weight:700}
+.admin-toggle:hover{background:#f0f4f8;border-color:var(--text-muted)}
+.admin-toggle:active{transform:scale(0.95)}
+.photo-section{margin:12px 16px 0;background:white;border-radius:18px;overflow:hidden;border:2px solid #C6F6D5;box-shadow:0 4px 14px rgba(0,132,61,0.08);position:relative;z-index:1}
 .photo-hdr{background:linear-gradient(90deg,var(--gs-dark),var(--gs-mid));color:white;padding:12px 16px;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:space-between}
 .photo-pending{background:rgba(0,0,0,0.2);font-size:10px;padding:3px 10px;border-radius:10px;font-weight:600}
-.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px}
+.photo-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:4px;max-height:600px;overflow-y:auto}
+.photo-item{position:relative;aspect-ratio:1;overflow:hidden;border-radius:10px;background:#f0f0f0}
+.photo-img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-delete{position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:white;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s}
+.photo-delete:hover{background:rgba(0,0,0,0.8)}
 .photo-ph{background:linear-gradient(135deg,#F0FFF4,#E6FFED);aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#68D391;font-size:12px;font-weight:600;border-radius:10px}
 .photo-ph-icon{font-size:30px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999}
+.modal-box{background:white;border-radius:18px;padding:24px;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,0.3)}
+.modal-title{font-size:16px;font-weight:800;color:var(--text-primary);margin-bottom:16px}
+.modal-input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:10px;font-size:14px;color:var(--text-primary);font-family:inherit;margin-bottom:16px}
+.modal-input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,107,157,0.1)}
+.modal-buttons{display:flex;gap:8px}
+.modal-btn{flex:1;padding:11px 16px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s}
+.modal-btn.submit{background:var(--pink);color:white}
+.modal-btn.submit:hover{background:#E84393}
+.modal-btn.cancel{background:var(--border);color:var(--text-primary)}
+.modal-btn.cancel:hover{background:#E8D0F0}
+.upload-zone{border:2px dashed #F0D0F0;border-radius:14px;padding:24px;text-align:center;background:white;cursor:pointer;transition:all 0.2s}
+.upload-zone:hover{border-color:#E8D0F0;background:#FDF5FF}
 `;
