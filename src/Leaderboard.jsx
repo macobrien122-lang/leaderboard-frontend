@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 const BACKEND = 'https://leaderboard-backend-qpmb.onrender.com';
-const SUPABASE_URL = 'https://pnwcbqdibrnorpctzhkw.supabase.co'; // from your existing setup
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBud2NicWRpYnJub3JwY3R6aGt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTkwODczNDAsImV4cCI6MTk4NDY2NzM0MH0.wZ-Rw7g3n7g-qZxN9z-Qx9z-Qx9z-Qx9z-Qx9z'; // anon key from your Supabase project
+const SUPABASE_URL = 'https://hrzzflnlbekkupmcppuv.supabase.co'; // from your existing setup
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyenpmbG5sYmVra3VwbWNwcHV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMDY4MTIsImV4cCI6MjA5ODU4MjgxMn0.DogSM71Kb3tWSmxCOIlkQ6ihdWjXho8Zw35lif7Nki0'; // anon key from your Supabase project
 const CLOUDINARY_CLOUD = 'cob8c5jt';
 const REFRESH_INTERVAL = 30000;
 
