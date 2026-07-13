@@ -152,7 +152,7 @@ export default function Leaderboard() {
       {/* 1. Header */}
       <div className="header">
         <div className="header-inner">
-          <img src="/EDS Logo White (002).png" alt="Evans Distribution Systems" className="header-logo" />
+          <img src="/EDS Logo White.png" alt="Evans Distribution Systems" className="header-logo" />
           <div className="header-titles">
             <div className="header-main">Evans Fulfillment Challenge ⚡</div>
             <div className="header-sub">Girl Scouts Unite Leaderboard</div>
