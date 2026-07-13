@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 const BACKEND = 'https://leaderboard-backend-qpmb.onrender.com';
-const SUPABASE_URL = 'https://hrzzflnlbekkupmcppuv.supabase.co'; // from your existing setup
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyenpmbG5sYmVra3VwbWNwcHV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMDY4MTIsImV4cCI6MjA5ODU4MjgxMn0.DogSM71Kb3tWSmxCOIlkQ6ihdWjXho8Zw35lif7Nki0'; // anon key from your Supabase project
-const CLOUDINARY_CLOUD = 'cob8c5jt';
 const REFRESH_INTERVAL = 30000;
 
 const TABS = [
@@ -28,14 +25,7 @@ export default function Leaderboard() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinned, setPinned] = useState(null);
   const [lastUpd, setLastUpd] = useState('Connecting to leaderboard…');
-
-  // Photo board state
   const [photos, setPhotos] = useState([]);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [adminMode, setAdminMode] = useState(false);
-  const [showAdminPassword, setShowAdminPassword] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
 
   useEffect(() => {
     try {
@@ -64,18 +54,10 @@ export default function Leaderboard() {
     return () => clearInterval(id);
   }, [fetchData]);
 
-  // Fetch photos from Supabase
+  // Fetch photos from backend
   const fetchPhotos = useCallback(async () => {
     try {
-      const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/photos?select=*&order=uploaded_at.desc`,
-        {
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-          },
-        }
-      );
+      const r = await fetch(BACKEND + '/api/photos/list');
       if (r.ok) {
         const data = await r.json();
         setPhotos(data || []);
@@ -87,7 +69,7 @@ export default function Leaderboard() {
 
   useEffect(() => {
     fetchPhotos();
-    const id = setInterval(fetchPhotos, 10000); // Refresh every 10s
+    const id = setInterval(fetchPhotos, 10000);
     return () => clearInterval(id);
   }, [fetchPhotos]);
 
@@ -107,95 +89,18 @@ export default function Leaderboard() {
     try { localStorage.removeItem('gsPin'); } catch (e) {}
   };
 
-  const handleUpload = async (files) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-
-    try {
-      for (const file of files) {
-        // Upload to Cloudinary
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', 'girl_scouts_leaderboard'); // unsigned preset (public)
-        formData.append('cloud_name', CLOUDINARY_CLOUD);
-
-        const res = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
-          { method: 'POST', body: formData }
-        );
-
-        if (!res.ok) throw new Error('Cloudinary upload failed');
-
-        const data = await res.json();
-        const photoUrl = data.secure_url;
-        const publicId = data.public_id;
-
-        // Store in Supabase
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/photos`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
-            },
-            body: JSON.stringify({
-              cloudinary_url: photoUrl,
-              public_id: publicId,
-            }),
-          }
-        );
-      }
-
-      // Refresh photos
-      await fetchPhotos();
-      setShowUploadModal(false);
-    } catch (e) {
-      console.error('Upload error:', e);
-      alert('Upload failed. Please try again.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const deletePhoto = async (id) => {
     if (!window.confirm('Delete this photo?')) return;
-
     try {
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/photos?id=eq.${id}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-          },
-        }
-      );
+      await fetch(BACKEND + '/api/photos/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
       setPhotos(photos.filter(p => p.id !== id));
     } catch (e) {
       console.error('Delete error:', e);
       alert('Delete failed.');
-    }
-  };
-
-  const toggleAdminMode = () => {
-    if (adminMode) {
-      setAdminMode(false);
-      return;
-    }
-    setShowAdminPassword(true);
-    setAdminPassword('');
-  };
-
-  const handleAdminPasswordSubmit = () => {
-    if (adminPassword === 'admin') {
-      setAdminMode(true);
-      setShowAdminPassword(false);
-    } else {
-      alert('Incorrect password');
-      setAdminPassword('');
     }
   };
 
@@ -259,83 +164,34 @@ export default function Leaderboard() {
     <div className="app">
       <style>{CSS}</style>
 
-      {/* Admin password modal */}
-      {showAdminPassword && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <div className="modal-title">Enter Admin Password</div>
-            <input
-              type="password"
-              placeholder="Password"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAdminPasswordSubmit()}
-              autoFocus
-              className="modal-input"
-            />
-            <div className="modal-buttons">
-              <button className="modal-btn cancel" onClick={() => setShowAdminPassword(false)}>Cancel</button>
-              <button className="modal-btn submit" onClick={handleAdminPasswordSubmit}>Enter</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upload modal */}
-      {showUploadModal && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: '400px' }}>
-            <div className="modal-title">Upload a Photo</div>
-            <div
-              className="upload-zone"
-              onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = '#f5e6ff'; }}
-              onDragLeave={(e) => { e.currentTarget.style.background = 'white'; }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.currentTarget.style.background = 'white';
-                handleUpload(e.dataTransfer.files);
-              }}
-            >
-              <div style={{ textAlign: 'center', color: '#B39DCC' }}>
-                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📸</div>
-                <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Drag & drop your photo here</div>
-                <div style={{ fontSize: '12px', color: '#a0aec0' }}>or</div>
-              </div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleUpload(e.target.files)}
-                style={{ display: 'none' }}
-                id="photo-picker"
-              />
-              <label htmlFor="photo-picker" style={{ cursor: 'pointer', color: '#1B5E9B', fontSize: '14px', fontWeight: '600', textDecoration: 'underline' }}>
-                click to browse
-              </label>
-            </div>
-            {uploading && <div style={{ textAlign: 'center', marginTop: '12px', color: '#a0aec0' }}>Uploading...</div>}
-            <button className="modal-btn cancel" onClick={() => setShowUploadModal(false)} style={{ marginTop: '12px', width: '100%' }}>Close</button>
-          </div>
-        </div>
-      )}
-
       {/* 1. Header */}
       <div className="header">
         <div className="header-inner">
-          <img src="/evans-logo-square.png" alt="Evans Distribution Systems" className="header-logo" />
+          <img src="/EDS Logo White (002).png" alt="Evans Distribution Systems" className="header-logo" />
           <div className="header-titles">
             <div className="header-main">Evans Fulfillment Challenge ⚡</div>
-            <div className="header-sub">Girl Scouts Conference Leaderboard</div>
+            <div className="header-sub">Girl Scouts Unite Leaderboard</div>
           </div>
         </div>
       </div>
 
-      {/* 2. Live Ribbon */}
+      {/* 2. Evans Blurb Banner */}
+      <div className="evans-banner">
+        <p className="evans-text">
+          Evans Distribution Systems is a privately owned third-party logistics (3PL) provider based in Melvindale, Michigan.{' '}
+          <a href="https://www.evansdist.com/girlscouts" target="_blank" rel="noopener noreferrer" className="evans-link">
+            Learn more →
+          </a>
+        </p>
+      </div>
+
+      {/* 3. Live Ribbon */}
       <div className="gs-ribbon">
         <div className="live-pill"><span className="live-dot"></span>🟢 LIVE</div>
         <div className="refresh-text">Refreshes every 30s</div>
       </div>
 
-      {/* 3. Search */}
+      {/* 4. Search */}
       <div className="search-wrap">
         <div className="search-inner">
           <span className="search-icon">🔍</span>
@@ -374,7 +230,7 @@ export default function Leaderboard() {
         )}
       </div>
 
-      {/* 4. Pinned Card */}
+      {/* 5. Pinned Card */}
       <div className="pinned-section">
         {!livePinned ? (
           <div className="no-pinned">
@@ -410,7 +266,7 @@ export default function Leaderboard() {
         )}
       </div>
 
-      {/* 5. Category Tabs */}
+      {/* 6. Category Tabs */}
       <div className="tabs-wrap">
         {TABS.map((t, i) => (
           <button
@@ -425,7 +281,7 @@ export default function Leaderboard() {
 
       <div className="last-upd">{lastUpd}</div>
 
-      {/* 6. Individual Scores */}
+      {/* 7. Individual Rankings */}
       <div className="section-wrap">
         <div className="section-card">
           <div className="section-header">🏅 Individual Rankings</div>
@@ -447,42 +303,7 @@ export default function Leaderboard() {
         </div>
       </div>
 
-      {/* 7. Company Blurb */}
-      <div className="company-section">
-        <div className="company-card">
-          <div className="company-top">
-            <img src="/evans-logo-square.png" alt="Evans logo" className="company-logo" />
-            <div className="company-top-text">
-              <div className="company-top-label">Presenting Sponsor</div>
-              <div className="company-top-name">Evans Distribution Systems</div>
-            </div>
-          </div>
-          <div className="company-body">
-            <p className="company-blurb">
-              Evans Distribution Systems is a privately owned third-party logistics (3PL) provider
-              based in Melvindale, Michigan. <b>Click below</b> to see how Evans supports Girl Scouts
-              through its nationwide fulfillment and Digital Cookie program.
-            </p>
-            <a className="company-link" href="https://www.evansdist.com" target="_blank" rel="noopener noreferrer">
-              Visit evansdist.com →
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* 8. Upload Button + Admin Toggle */}
-      <div className="upload-section">
-        <button className="upload-btn" onClick={() => setShowUploadModal(true)}>📸 Upload your selfie!</button>
-        <button
-          className="admin-toggle"
-          onClick={toggleAdminMode}
-          title={adminMode ? 'Exit admin mode' : 'Enter admin mode'}
-        >
-          {adminMode ? '🔒 Admin' : '👤'}
-        </button>
-      </div>
-
-      {/* 9. Photo Gallery */}
+      {/* 8. Photo Gallery */}
       <div className="photo-section">
         <div className="photo-hdr">
           <span>📷 Conference Photo Board</span>
@@ -493,15 +314,6 @@ export default function Leaderboard() {
             photos.slice(0, 12).map(photo => (
               <div key={photo.id} className="photo-item">
                 <img src={photo.cloudinary_url} alt="Uploaded" className="photo-img" />
-                {adminMode && (
-                  <button
-                    className="photo-delete"
-                    onClick={() => deletePhoto(photo.id)}
-                    title="Delete"
-                  >
-                    🗑️
-                  </button>
-                )}
               </div>
             ))
           ) : (
@@ -533,10 +345,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;background-image:radial-gradient(circle,#FF6B9D22 2px,transparent 2px),radial-gradient(circle,#F5B80022 2px,transparent 2px),radial-gradient(circle,#00843D22 2px,transparent 2px);background-size:40px 40px,60px 60px,50px 50px;background-position:0 0,20px 20px,10px 30px;pointer-events:none;z-index:0}
 .header{background:linear-gradient(135deg,var(--eb) 0%,#2471C8 100%);padding:14px 16px 16px;box-shadow:0 3px 12px rgba(27,94,155,0.35)}
 .header-inner{display:flex;align-items:center;gap:12px}
-.header-logo{width:44px;height:44px;object-fit:contain;background:white;border-radius:8px;padding:3px;flex-shrink:0}
+.header-logo{width:44px;height:44px;object-fit:contain;background:transparent;flex-shrink:0}
 .header-titles{color:white}
 .header-main{font-size:18px;font-weight:800;line-height:1.2;letter-spacing:-0.3px}
 .header-sub{font-size:11px;opacity:0.75;margin-top:3px;font-style:italic}
+.evans-banner{background:white;border-bottom:0.5px solid #F0E6F0;padding:12px 16px}
+.evans-text{font-size:13px;color:var(--text-secondary);line-height:1.6;margin:0}
+.evans-link{color:var(--eb);font-weight:600;text-decoration:none}
+.evans-link:hover{text-decoration:underline}
 .gs-ribbon{background:linear-gradient(90deg,var(--gs-dark) 0%,var(--gs-mid) 100%);padding:8px 16px;display:flex;align-items:center;justify-content:space-between}
 .live-pill{background:rgba(255,255,255,0.2);color:white;font-size:10px;font-weight:800;padding:5px 12px;border-radius:20px;letter-spacing:1px;display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,0.3)}
 .live-dot{width:7px;height:7px;background:#7FE8A2;border-radius:50%;animation:pulse 1.4s infinite;box-shadow:0 0 6px #7FE8A2}
@@ -616,45 +432,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;backgrou
 .last-upd{text-align:center;font-size:10px;color:var(--text-muted);padding:10px 16px 0}
 .empty{padding:28px;text-align:center;font-size:13px;color:var(--text-muted)}
 .empty-icon{font-size:32px;margin-bottom:8px}
-.company-section{margin:14px 16px 0}
-.company-card{background:white;border-radius:18px;border:2px solid #D6EAF8;overflow:hidden;box-shadow:0 4px 14px rgba(27,94,155,0.08)}
-.company-top{background:linear-gradient(135deg,var(--eb) 0%,#2471C8 100%);padding:14px 16px;display:flex;align-items:center;gap:12px}
-.company-logo{width:38px;height:38px;object-fit:contain;background:white;border-radius:6px;padding:2px;flex-shrink:0}
-.company-top-text{color:white}
-.company-top-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;opacity:0.7;margin-bottom:3px}
-.company-top-name{font-size:15px;font-weight:800;line-height:1.2}
-.company-body{padding:14px 16px 16px}
-.company-blurb{font-size:13px;color:var(--text-secondary);line-height:1.65;margin-bottom:14px}
-.company-link{display:inline-flex;align-items:center;gap:7px;background:var(--eb);color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:24px;text-decoration:none;box-shadow:0 3px 10px rgba(27,94,155,0.3);transition:background 0.15s,box-shadow 0.15s}
-.company-link:hover{background:var(--eb-dark);box-shadow:0 4px 14px rgba(27,94,155,0.4)}
-.upload-section{margin:14px 16px 0;display:flex;gap:8px;position:relative;z-index:1}
-.upload-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(135deg,var(--pink) 0%,#C8479B 100%);color:white;border:none;border-radius:28px;padding:15px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 5px 18px rgba(255,107,157,0.4);transition:transform 0.15s,box-shadow 0.15s;letter-spacing:0.2px}
-.upload-btn:hover{transform:translateY(-2px);box-shadow:0 7px 22px rgba(255,107,157,0.5)}
-.upload-btn:active{transform:translateY(0)}
-.admin-toggle{background:white;border:2px solid var(--border);color:var(--text-primary);width:48px;height:48px;border-radius:24px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-weight:700}
-.admin-toggle:hover{background:#f0f4f8;border-color:var(--text-muted)}
-.admin-toggle:active{transform:scale(0.95)}
 .photo-section{margin:12px 16px 0;background:white;border-radius:18px;overflow:hidden;border:2px solid #C6F6D5;box-shadow:0 4px 14px rgba(0,132,61,0.08);position:relative;z-index:1}
 .photo-hdr{background:linear-gradient(90deg,var(--gs-dark),var(--gs-mid));color:white;padding:12px 16px;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:space-between}
 .photo-pending{background:rgba(0,0,0,0.2);font-size:10px;padding:3px 10px;border-radius:10px;font-weight:600}
 .photo-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:4px;max-height:600px;overflow-y:auto}
 .photo-item{position:relative;aspect-ratio:1;overflow:hidden;border-radius:10px;background:#f0f0f0}
 .photo-img{width:100%;height:100%;object-fit:cover;display:block}
-.photo-delete{position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:white;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s}
-.photo-delete:hover{background:rgba(0,0,0,0.8)}
 .photo-ph{background:linear-gradient(135deg,#F0FFF4,#E6FFED);aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#68D391;font-size:12px;font-weight:600;border-radius:10px}
 .photo-ph-icon{font-size:30px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999}
-.modal-box{background:white;border-radius:18px;padding:24px;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,0.3)}
-.modal-title{font-size:16px;font-weight:800;color:var(--text-primary);margin-bottom:16px}
-.modal-input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:10px;font-size:14px;color:var(--text-primary);font-family:inherit;margin-bottom:16px}
-.modal-input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,107,157,0.1)}
-.modal-buttons{display:flex;gap:8px}
-.modal-btn{flex:1;padding:11px 16px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s}
-.modal-btn.submit{background:var(--pink);color:white}
-.modal-btn.submit:hover{background:#E84393}
-.modal-btn.cancel{background:var(--border);color:var(--text-primary)}
-.modal-btn.cancel:hover{background:#E8D0F0}
-.upload-zone{border:2px dashed #F0D0F0;border-radius:14px;padding:24px;text-align:center;background:white;cursor:pointer;transition:all 0.2s}
-.upload-zone:hover{border-color:#E8D0F0;background:#FDF5FF}
 `;
