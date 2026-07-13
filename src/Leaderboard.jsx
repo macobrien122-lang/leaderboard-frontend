@@ -163,7 +163,7 @@ export default function Leaderboard() {
       {/* 2. Evans Blurb Banner */}
       <div className="evans-banner">
         <p className="evans-text">
-          Evans Distribution Systems is a privately owned third-party logistics (3PL) provider based in Melvindale, Michigan. See how Evans supports Girl Scouts through its nationwide fulfillment and Digital Cookie program..{' '}
+          Evans Distribution Systems is a privately owned third-party logistics (3PL) provider based in Melvindale, Michigan. See how Evans supports Girl Scouts through its nationwide fulfillment and Digital Cookie program.{' '}
           <a href="https://www.evansdist.com/girlscouts" target="_blank" rel="noopener noreferrer" className="evans-link">
             Learn more →
           </a>
@@ -271,7 +271,7 @@ export default function Leaderboard() {
         <div className="section-card">
           <div className="section-header">🏅 Individual Rankings</div>
           {indiv.length ? (
-            indiv.slice(0, 50).map((e, idx) => (
+            indiv.slice(0, 10).map((e, idx) => (
               <div key={idx} className="lb-row" onClick={() => pinEntry(e)}>
                 {rankBubble(e.groupRank)}
                 <div className="row-info">
@@ -330,7 +330,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;background-image:radial-gradient(circle,#FF6B9D22 2px,transparent 2px),radial-gradient(circle,#F5B80022 2px,transparent 2px),radial-gradient(circle,#00843D22 2px,transparent 2px);background-size:40px 40px,60px 60px,50px 50px;background-position:0 0,20px 20px,10px 30px;pointer-events:none;z-index:0}
 .header{background:linear-gradient(135deg,var(--eb) 0%,#2471C8 100%);padding:14px 16px 16px;box-shadow:0 3px 12px rgba(27,94,155,0.35)}
 .header-inner{display:flex;align-items:center;gap:12px}
-.header-logo{width:60px;height:60px;object-fit:contain;background:transparent;flex-shrink:0}
+.header-logo{width:80px;height:80px;object-fit:contain;background:transparent;flex-shrink:0}
 .header-titles{color:white}
 .header-main{font-size:18px;font-weight:800;line-height:1.2;letter-spacing:-0.3px}
 .header-sub{font-size:11px;opacity:0.75;margin-top:3px;font-style:italic}
