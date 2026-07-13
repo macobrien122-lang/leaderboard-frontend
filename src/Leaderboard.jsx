@@ -89,21 +89,6 @@ export default function Leaderboard() {
     try { localStorage.removeItem('gsPin'); } catch (e) {}
   };
 
-  const deletePhoto = async (id) => {
-    if (!window.confirm('Delete this photo?')) return;
-    try {
-      await fetch(BACKEND + '/api/photos/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      setPhotos(photos.filter(p => p.id !== id));
-    } catch (e) {
-      console.error('Delete error:', e);
-      alert('Delete failed.');
-    }
-  };
-
   const tab = TABS[currentTab];
 
   const indiv = allData
