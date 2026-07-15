@@ -176,7 +176,7 @@ export default function Leaderboard() {
         <div className="modal-overlay" onClick={() => setSelectedPhoto(null)}>
           <div className="photo-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setSelectedPhoto(null)}>✕</button>
-            <img src={selectedPhoto.cloudinary_url} alt="Photo" className="photo-modal-img" />
+            <img src={selectedPhoto.cloudinary_url} alt="" className="photo-modal-img" />
           </div>
         </div>
       )}
