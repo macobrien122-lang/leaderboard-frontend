@@ -26,8 +26,6 @@ export default function Leaderboard() {
   const [pinned, setPinned] = useState(null);
   const [lastUpd, setLastUpd] = useState('Connecting to leaderboard…');
   const [photos, setPhotos] = useState([]);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [showWinners, setShowWinners] = useState(false);
 
   useEffect(() => {
     try {
@@ -91,26 +89,6 @@ export default function Leaderboard() {
     try { localStorage.removeItem('gsPin'); } catch (e) {}
   };
 
-  // Check if it's past July 25, 2026 7 PM EST
-  const isConferenceEnded = () => {
-    const now = new Date();
-    const endTime = new Date('2026-07-25T19:00:00-04:00'); // 7 PM EDT (UTC-4 in July)
-    return now >= endTime;
-  };
-
-  // Compute winners (top 3 per age group)
-  const getWinners = () => {
-    const winners = {};
-    TABS.forEach(tab => {
-      const grouped = allData
-        .filter(e => tab.match(e.group || ''))
-        .sort((a, b) => a.elapsedTimeInMilliseconds - b.elapsedTimeInMilliseconds)
-        .slice(0, 3);
-      winners[tab.key] = grouped.map((e, i) => ({ ...e, place: i + 1 }));
-    });
-    return winners;
-  };
-
   const tab = TABS[currentTab];
 
   const indiv = allData
@@ -170,54 +148,6 @@ export default function Leaderboard() {
   return (
     <div className="app">
       <style>{CSS}</style>
-
-      {/* Photo Modal */}
-      {selectedPhoto && (
-        <div className="modal-overlay" onClick={() => setSelectedPhoto(null)}>
-          <div className="photo-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setSelectedPhoto(null)}>✕</button>
-            <img src={selectedPhoto.cloudinary_url} alt="Photo" className="photo-modal-img" />
-          </div>
-        </div>
-      )}
-
-      {/* Winners Announcement Modal */}
-      {showWinners && (() => {
-        const winners = getWinners();
-        return (
-          <div className="modal-overlay winners-overlay" onClick={() => setShowWinners(false)}>
-            <div className="winners-modal" onClick={(e) => e.stopPropagation()}>
-              <button className="modal-close" onClick={() => setShowWinners(false)}>✕</button>
-              <div className="winners-title">🏆 Conference Champions 🏆</div>
-              <div className="winners-grid">
-                {TABS.map(tab => (
-                  <div key={tab.key} className="winners-group">
-                    <div className="winners-group-title">{tab.label}</div>
-                    {winners[tab.key].length > 0 ? (
-                      winners[tab.key].map((winner, idx) => (
-                        <div key={idx} className="winner-row">
-                          <span className="winner-medal">{winner.place === 1 ? '🥇' : winner.place === 2 ? '🥈' : '🥉'}</span>
-                          <span className="winner-name">{winner.firstName} {winner.lastInitial}</span>
-                          <span className="winner-time">{fmt(winner.elapsedTimeInMilliseconds)}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="no-winners">No data yet</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Winners Toggle Button - Only show after July 25, 7 PM EST */}
-      {isConferenceEnded() && (
-        <button className="winners-toggle" onClick={() => setShowWinners(true)} title="Show winners">
-          🏆
-        </button>
-      )}
 
       {/* 1. Header */}
       <div className="header">
@@ -367,7 +297,7 @@ export default function Leaderboard() {
         <div className="photo-grid">
           {photos.slice(0, 12).length ? (
             photos.slice(0, 12).map(photo => (
-              <div key={photo.id} className="photo-item" onClick={() => setSelectedPhoto(photo)} style={{ cursor: 'pointer' }}>
+              <div key={photo.id} className="photo-item">
                 <img src={photo.cloudinary_url} alt="Uploaded" className="photo-img" />
               </div>
             ))
@@ -495,23 +425,4 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:100%;backgrou
 .photo-img{width:100%;height:100%;object-fit:cover;display:block}
 .photo-ph{background:linear-gradient(135deg,#F0FFF4,#E6FFED);aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#68D391;font-size:12px;font-weight:600;border-radius:10px}
 .photo-ph-icon{font-size:30px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999}
-.photo-modal{position:relative;max-width:90vw;max-height:90vh;background:white;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4)}
-.photo-modal-img{width:100%;height:100%;object-fit:contain;max-width:90vw;max-height:90vh}
-.modal-close{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);border:none;color:white;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s;z-index:10000}
-.modal-close:hover{background:rgba(0,0,0,0.8)}
-.winners-overlay{background:rgba(0,0,0,0.8)}
-.winners-modal{background:white;border-radius:18px;padding:24px;max-width:500px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
-.winners-title{font-size:24px;font-weight:900;color:var(--text-primary);text-align:center;margin-bottom:20px;letter-spacing:1px}
-.winners-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.winners-group{background:linear-gradient(135deg,#FAF0FF,#F5E6FF);border-radius:12px;padding:14px;border:2px solid #E8D0F0}
-.winners-group-title{font-size:13px;font-weight:800;color:var(--text-primary);margin-bottom:10px;text-align:center;padding-bottom:8px;border-bottom:2px solid #E8D0F0}
-.winner-row{display:flex;align-items:center;gap:8px;padding:8px 0;font-size:12px;color:var(--text-secondary)}
-.winner-medal{font-size:18px;flex-shrink:0}
-.winner-name{font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis}
-.winner-time{font-weight:600;font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums}
-.no-winners{text-align:center;font-size:11px;color:var(--text-muted);padding:8px;font-style:italic}
-.winners-toggle{position:fixed;bottom:20px;right:20px;background:linear-gradient(135deg,#FFE566,#F5B800);color:#7B4F00;border:none;width:56px;height:56px;border-radius:50%;font-size:28px;cursor:pointer;box-shadow:0 4px 14px rgba(245,184,0,0.4);transition:all 0.2s;z-index:100}
-.winners-toggle:hover{transform:scale(1.1);box-shadow:0 6px 20px rgba(245,184,0,0.6)}
-.winners-toggle:active{transform:scale(0.95)}
 `;
